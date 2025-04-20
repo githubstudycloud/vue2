@@ -6,7 +6,7 @@
     </div>
     <div class="button-container">
       <button @click="exportToExcel">导出为Excel</button>
-      <button @click="exportToExcelPro" class="pro-button">导出为Excel (增强版)</button>
+      <button @click="exportToExcelFull" class="full-button">导出为Excel (增强版)</button>
     </div>
   </div>
 </template>
@@ -14,7 +14,7 @@
 <script>
 import RichEditor from './components/RichEditor.vue';
 import ExcelExporter from './utils/ExcelExporter';
-import ExcelExporterPro from './utils/ExcelExporterPro';
+import ExcelExporterFull from './utils/ExcelExporterFull';
 
 export default {
   name: 'App',
@@ -41,14 +41,14 @@ export default {
       }
     },
     
-    exportToExcelPro() {
+    async exportToExcelFull() {
       if (!this.$refs.editor) {
         alert('编辑器不可用');
         return;
       }
       
       const editorElement = this.$refs.editor.getEditorElement();
-      const success = ExcelExporterPro.exportTableToExcel(editorElement);
+      const success = await ExcelExporterFull.exportTableToExcel(editorElement);
       
       if (!success) {
         alert('导出失败，请确保编辑器中有表格内容');
@@ -100,11 +100,11 @@ button:hover {
   background-color: #45a049;
 }
 
-.pro-button {
+.full-button {
   background-color: #2196F3;
 }
 
-.pro-button:hover {
+.full-button:hover {
   background-color: #1976D2;
 }
 </style>
