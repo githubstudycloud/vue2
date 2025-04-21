@@ -479,13 +479,45 @@ export default {
   },
   
   /**
-   * 计算内容的显示宽度
+   * 计算内容的显示宽度 (主方法)
    * @param {String} content - 内容
    * @returns {Number} - 估算的像素宽度
    */
   calculateContentWidth(content) {
     if (!content) return 0;
     
+    // 处理多行内容情况
+    if (content.includes('\n')) {
+      return this.calculateMultilineWidth(content);
+    }
+    
+    // 计算单行内容宽度
+    return this.calculateSingleLineWidth(content);
+  },
+  
+  /**
+   * 计算多行内容宽度
+   * @param {String} content - 多行内容
+   * @returns {Number} - 估算的像素宽度
+   */
+  calculateMultilineWidth(content) {
+    const lines = content.split('\n');
+    let maxLineWidth = 0;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const lineWidth = this.calculateSingleLineWidth(lines[i]);
+      maxLineWidth = Math.max(maxLineWidth, lineWidth);
+    }
+    
+    return maxLineWidth;
+  },
+  
+  /**
+   * 计算单行内容宽度
+   * @param {String} line - 单行内容
+   * @returns {Number} - 估算的像素宽度
+   */
+  calculateSingleLineWidth(line) {
     // 基础字符宽度（像素）
     const charWidths = {
       default: 7,  // 默认ASCII字符宽度
@@ -496,40 +528,55 @@ export default {
     let totalWidth = 0;
     
     // 统计不同类型字符
-    for (let i = 0; i < content.length; i++) {
-      const char = content.charAt(i);
-      const code = char.charCodeAt(0);
-      
-      // 中文字符和其他全角字符
-      if ((code >= 0x4E00 && code <= 0x9FFF) || 
-          (code >= 0x3000 && code <= 0x303F) || 
-          (code >= 0xFF00 && code <= 0xFFEF)) {
-        totalWidth += charWidths.wide;
-      } 
-      // 窄字符
-      else if (char === 'i' || char === 'l' || char === 'I' || char === '.' || char === ',' || char === ':' || char === ';') {
-        totalWidth += charWidths.narrow;
-      } 
-      // 默认ASCII字符
-      else {
-        totalWidth += charWidths.default;
-      }
-    }
-    
-    // 处理换行情况
-    const lines = content.split('\n');
-    if (lines.length > 1) {
-      // 取最长行的宽度
-      let maxLineWidth = 0;
-      for (let i = 0; i < lines.length; i++) {
-        const lineWidth = this.calculateContentWidth(lines[i]);
-        if (lineWidth > maxLineWidth) {
-          maxLineWidth = lineWidth;
-        }
-      }
-      totalWidth = maxLineWidth;
+    for (let i = 0; i < line.length; i++) {
+      const charWidth = this.getCharacterWidth(line.charAt(i), charWidths);
+      totalWidth += charWidth;
     }
     
     return totalWidth;
+  },
+  
+  /**
+   * 获取单个字符的宽度
+   * @param {String} char - 字符
+   * @param {Object} charWidths - 字符宽度配置
+   * @returns {Number} - 字符宽度
+   */
+  getCharacterWidth(char, charWidths) {
+    const code = char.charCodeAt(0);
+    
+    // 中文字符和其他全角字符
+    if (this.isWideCharacter(code)) {
+      return charWidths.wide;
+    } 
+    // 窄字符
+    else if (this.isNarrowCharacter(char)) {
+      return charWidths.narrow;
+    } 
+    // 默认ASCII字符
+    else {
+      return charWidths.default;
+    }
+  },
+  
+  /**
+   * 判断是否为宽字符（如中文、日文等）
+   * @param {Number} code - 字符码点
+   * @returns {Boolean} - 是否为宽字符
+   */
+  isWideCharacter(code) {
+    return (code >= 0x4E00 && code <= 0x9FFF) || 
+           (code >= 0x3000 && code <= 0x303F) || 
+           (code >= 0xFF00 && code <= 0xFFEF);
+  },
+  
+  /**
+   * 判断是否为窄字符
+   * @param {String} char - 字符
+   * @returns {Boolean} - 是否为窄字符
+   */
+  isNarrowCharacter(char) {
+    const narrowChars = ['i', 'l', 'I', '.', ',', ':', ';'];
+    return narrowChars.indexOf(char) !== -1;
   }
 };

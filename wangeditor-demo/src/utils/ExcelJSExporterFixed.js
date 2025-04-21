@@ -140,27 +140,44 @@ export default {
         // 记录合并单元格信息
         const colspan = parseInt(cell.getAttribute('colspan')) || 1;
         if (colspan > 1) {
-          for (let i = colIndex; i < colIndex + colspan; i++) {
-            if (!mergedCellsInfo[i]) {
-              mergedCellsInfo[i] = [];
-            }
-            mergedCellsInfo[i].push({
-              content: text,
-              width: ExcelStyleHelper.calculateContentWidth(text),
-              colspan: colspan
-            });
-          }
+          this.recordMergedCellInfo(mergedCellsInfo, colIndex, colspan, text);
         }
         
         // 处理合并单元格
         ExcelTableHelper.handleMergedCells(cell, worksheet, rowIndex, colIndex, skipCells);
         
         colIndex += colspan;
-      });
-    });
+      }, this);
+    }, this);
     
     // 设置列宽和行高，传入合并单元格信息
     this.optimizeTableDimensions(worksheet, mergedCellsInfo);
+  },
+  
+  /**
+   * 记录合并单元格信息
+   * @param {Object} mergedCellsInfo - 合并单元格信息集合
+   * @param {Number} colIndex - 列索引
+   * @param {Number} colspan - 合并列数
+   * @param {String} text - 单元格内容
+   */
+  recordMergedCellInfo(mergedCellsInfo, colIndex, colspan, text) {
+    // 计算单元格内容宽度
+    const width = ExcelStyleHelper.calculateContentWidth(text);
+    
+    // 为每一个被合并的列记录信息
+    for (let i = colIndex; i < colIndex + colspan; i++) {
+      if (!mergedCellsInfo[i]) {
+        mergedCellsInfo[i] = [];
+      }
+      
+      // 添加合并单元格信息
+      mergedCellsInfo[i].push({
+        content: text,
+        width: width,
+        colspan: colspan
+      });
+    }
   },
   
   /**
@@ -192,56 +209,103 @@ export default {
     
     for (let i = 0; i < columns.length; i++) {
       const column = columns[i];
-      let maxWidth = 0;
-      let maxLength = 8; // 最小列宽
       const colIndex = i + 1; // ExcelJS列索引从1开始
       
-      // 遍历该列的所有单元格，找出最长的内容
-      column.eachCell({ includeEmpty: true }, function(cell) {
-        if (!cell.value) return;
-        
-        const cellValue = cell.value.toString();
-        let cellWidth = ExcelStyleHelper.calculateContentWidth(cellValue);
-        
-        // 普通单元格直接使用宽度
-        maxWidth = Math.max(maxWidth, cellWidth);
-        
-        let length = cellValue.length;
-        // 为中文字符增加额外宽度
-        const chineseChars = cellValue.match(/[\u4e00-\u9fa5]/g);
-        if (chineseChars) {
-          length += chineseChars.length * 0.5;
-        }
-        
-        maxLength = Math.max(maxLength, length);
-      });
+      // 收集列宽度数据
+      const widthData = this.collectColumnWidthData(column, colIndex, mergedCellsInfo);
       
-      // 处理该列的合并单元格宽度
-      if (mergedCellsInfo && mergedCellsInfo[colIndex] && mergedCellsInfo[colIndex].length > 0) {
-        // 遍历该列所有合并单元格
-        for (let j = 0; j < mergedCellsInfo[colIndex].length; j++) {
-          const mergedInfo = mergedCellsInfo[colIndex][j];
-          // 计算合并单元格的平均宽度
-          if (mergedInfo.colspan > 1) {
-            // 如果是合并单元格，宽度需要除以合并的列数
-            const adjustedWidth = mergedInfo.width / mergedInfo.colspan;
-            // 使用调整后的宽度与当前最大宽度比较
-            maxWidth = Math.max(maxWidth, adjustedWidth);
-          }
-        }
+      // 计算并应用最终列宽
+      this.applyColumnWidth(column, widthData.maxWidth, widthData.maxLength);
+    }
+  },
+  
+  /**
+   * 收集列宽度数据
+   * @param {Object} column - 列对象
+   * @param {Number} colIndex - 列索引
+   * @param {Object} mergedCellsInfo - 合并单元格信息
+   * @returns {Object} - 宽度数据
+   */
+  collectColumnWidthData(column, colIndex, mergedCellsInfo) {
+    let maxWidth = 0;
+    let maxLength = 8; // 最小列宽
+    
+    // 处理普通单元格
+    this.processRegularCells(column, function(cellValue) {
+      const cellWidth = ExcelStyleHelper.calculateContentWidth(cellValue);
+      maxWidth = Math.max(maxWidth, cellWidth);
+      
+      let length = cellValue.length;
+      // 为中文字符增加额外宽度
+      const chineseChars = cellValue.match(/[\u4e00-\u9fa5]/g);
+      if (chineseChars) {
+        length += chineseChars.length * 0.5;
       }
       
-      // 设置列宽，更智能地计算宽度
-      if (maxWidth > 0) {
-        // 设置列宽，更好地自适应文字
-        // 有一个转换因子(0.14)将像素转换为Excel单位，并加上一点额外空间(+2)
-        // 同时限制最大宽度为40，防止过宽
-        const calculatedWidth = Math.min(maxWidth * 0.14 + 2, 40); 
-        column.width = calculatedWidth;
-      } else {
-        // 基于字符长度的备选方案
-        column.width = Math.min(maxLength + 2, 40); 
+      maxLength = Math.max(maxLength, length);
+    });
+    
+    // 处理合并单元格
+    this.processMergedCells(colIndex, mergedCellsInfo, function(adjustedWidth) {
+      maxWidth = Math.max(maxWidth, adjustedWidth);
+    });
+    
+    return { maxWidth, maxLength };
+  },
+  
+  /**
+   * 处理普通单元格
+   * @param {Object} column - 列对象
+   * @param {Function} callback - 处理回调
+   */
+  processRegularCells(column, callback) {
+    column.eachCell({ includeEmpty: true }, function(cell) {
+      if (!cell || !cell.value) return;
+      
+      const cellValue = cell.value.toString();
+      callback(cellValue);
+    });
+  },
+  
+  /**
+   * 处理合并单元格
+   * @param {Number} colIndex - 列索引
+   * @param {Object} mergedCellsInfo - 合并单元格信息
+   * @param {Function} callback - 处理回调
+   */
+  processMergedCells(colIndex, mergedCellsInfo, callback) {
+    if (!mergedCellsInfo || !mergedCellsInfo[colIndex]) {
+      return;
+    }
+    
+    const mergedCells = mergedCellsInfo[colIndex];
+    for (let j = 0; j < mergedCells.length; j++) {
+      const mergedInfo = mergedCells[j];
+      // 计算合并单元格的平均宽度
+      if (mergedInfo.colspan > 1) {
+        // 如果是合并单元格，宽度需要除以合并的列数
+        const adjustedWidth = mergedInfo.width / mergedInfo.colspan;
+        callback(adjustedWidth);
       }
+    }
+  },
+  
+  /**
+   * 应用最终列宽
+   * @param {Object} column - 列对象
+   * @param {Number} maxWidth - 最大内容宽度
+   * @param {Number} maxLength - 最大内容长度
+   */
+  applyColumnWidth(column, maxWidth, maxLength) {
+    if (maxWidth > 0) {
+      // 设置列宽，更好地自适应文字
+      // 有一个转换因子(0.14)将像素转换为Excel单位，并加上一点额外空间(+2)
+      // 同时限制最大宽度为40，防止过宽
+      const calculatedWidth = Math.min(maxWidth * 0.14 + 2, 40);
+      column.width = calculatedWidth;
+    } else {
+      // 基于字符长度的备选方案
+      column.width = Math.min(maxLength + 2, 40);
     }
   },
   
@@ -260,7 +324,7 @@ export default {
       
       // 检查内容高度
       row.eachCell({ includeEmpty: false }, function(cell) {
-        if (!cell.value) return;
+        if (!cell || !cell.value) return;
         
         // 如果内容包含换行符，增加行高
         const value = cell.value.toString();
