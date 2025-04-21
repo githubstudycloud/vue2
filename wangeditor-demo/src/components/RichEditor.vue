@@ -118,6 +118,21 @@ export default {
     getEditorElement() {
       // 返回编辑器DOM元素，用于导出表格
       return this.editor ? this.editor.getEditableContainer() : null;
+    },
+    
+    setContent(content) {
+      // 设置编辑器内容
+      if (this.editor) {
+        this.editor.clear();
+        if (content) {
+          this.editor.dangerouslyInsertHtml(content);
+        } else {
+          // 如果内容为空，显示默认示例
+          this.editor.dangerouslyInsertHtml(getAdvancedNestedTableHTML());
+        }
+        this.editorHtml = this.editor.getHtml();
+        this.$emit('input', this.editorHtml);
+      }
     }
   }
 }

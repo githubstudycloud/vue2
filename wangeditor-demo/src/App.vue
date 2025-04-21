@@ -5,10 +5,19 @@
       <rich-editor ref="editor" v-model="editorContent" />
     </div>
     <div class="button-container">
-      <button @click="exportToExcel">导出为Excel</button>
-      <button @click="exportToExcelPro" class="pro-button">导出为Excel (增强版)</button>
-      <button @click="exportWithExcelJS" class="exceljs-button">导出为Excel (ExcelJS版)</button>
-      <button @click="exportWithExcelJSFixed" class="fixed-button">导出为Excel (修复版)</button>
+      <div class="example-buttons">
+        <button @click="switchExample('default')" :class="{ active: currentExample === 'default' }">默认示例</button>
+        <button @click="switchExample('projectProgress')" :class="{ active: currentExample === 'projectProgress' }">项目进度表</button>
+        <button @click="switchExample('hrDepartment')" :class="{ active: currentExample === 'hrDepartment' }">人力资源表</button>
+        <button @click="switchExample('financialReport')" :class="{ active: currentExample === 'financialReport' }">财务报表</button>
+        <button @click="switchExample('productComparison')" :class="{ active: currentExample === 'productComparison' }">产品对比表</button>
+      </div>
+      <div class="export-buttons">
+        <button @click="exportToExcel">导出为Excel</button>
+        <button @click="exportToExcelPro" class="pro-button">导出为Excel (增强版)</button>
+        <button @click="exportWithExcelJS" class="exceljs-button">导出为Excel (ExcelJS版)</button>
+        <button @click="exportWithExcelJSFixed" class="fixed-button">导出为Excel (修复版)</button>
+      </div>
     </div>
   </div>
 </template>
@@ -19,6 +28,7 @@ import ExcelExporter from './utils/ExcelExporter';
 import ExcelExporterPro from './utils/ExcelExporterPro';
 import ExcelJSExporter from './utils/ExcelJSExporter';
 import ExcelJSExporterFixed from './utils/ExcelJSExporterFixed';
+import * as AdditionalTableExamples from './utils/AdditionalTableExamples';
 
 export default {
   name: 'App',
@@ -27,10 +37,39 @@ export default {
   },
   data() {
     return {
-      editorContent: ''
+      editorContent: '',
+      currentExample: 'default'
     }
   },
   methods: {
+    switchExample(exampleType) {
+      let content = '';
+      
+      switch (exampleType) {
+        case 'default':
+          // 使用默认示例
+          content = '';
+          break;
+        case 'projectProgress':
+          content = AdditionalTableExamples.getProjectProgressTableHTML();
+          break;
+        case 'hrDepartment':
+          content = AdditionalTableExamples.getHRDepartmentTableHTML();
+          break;
+        case 'financialReport':
+          content = AdditionalTableExamples.getFinancialReportTableHTML();
+          break;
+        case 'productComparison':
+          content = AdditionalTableExamples.getProductComparisonTableHTML();
+          break;
+      }
+      
+      this.currentExample = exampleType;
+      if (this.$refs.editor) {
+        this.$refs.editor.setContent(content);
+      }
+    },
+    
     exportToExcel() {
       if (!this.$refs.editor) {
         alert('编辑器不可用');
@@ -120,10 +159,23 @@ export default {
 
 .button-container {
   margin: 20px 0;
+}
+
+.example-buttons, .export-buttons {
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
   gap: 10px;
+  margin-bottom: 15px;
+}
+
+.example-buttons button.active {
+  background-color: #2196F3;
+  color: white;
+}
+
+.example-buttons button.active:hover {
+  background-color: #1976D2;
 }
 
 button {
