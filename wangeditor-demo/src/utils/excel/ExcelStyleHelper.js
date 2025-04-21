@@ -38,7 +38,9 @@ export default {
       }
       
       // 应用基本文本样式
-      this.applyTextStyles(htmlCell, excelCell, inlineStyle, computedStyle);
+      this.applyTextStylesFromElements(htmlCell, excelCell);
+      this.applyTextStylesFromCSS(htmlCell, excelCell, inlineStyle, computedStyle);
+      this.applyFontSize(htmlCell, excelCell, inlineStyle, computedStyle);
       
       // 应用颜色样式
       this.applyColorStyles(htmlCell, excelCell, inlineStyle, computedStyle);
@@ -56,38 +58,14 @@ export default {
   },
   
   /**
-   * 应用文本样式
+   * 从HTML元素标签应用文本样式
    * @param {HTMLElement} htmlCell - HTML单元格元素
    * @param {Object} excelCell - Excel单元格对象
-   * @param {CSSStyleDeclaration} inlineStyle - 内联样式
-   * @param {CSSStyleDeclaration} computedStyle - 计算样式
    */
-  applyTextStyles(htmlCell, excelCell, inlineStyle, computedStyle) {
+  applyTextStylesFromElements(htmlCell, excelCell) {
     if (!htmlCell || !excelCell) {
       return;
     }
-    
-    // 检查是否有带样式的子元素
-    let fontSize = '';
-    
-    const styledElements = htmlCell.querySelectorAll('*[style]');
-    Array.from(styledElements).forEach(function(elem) {
-      const style = elem.style;
-      
-      // 检查字体大小
-      if (style.fontSize) fontSize = style.fontSize;
-      
-      // 检查文本装饰
-      if (style.fontWeight === 'bold' || parseInt(style.fontWeight) >= 700) {
-        excelCell.font.bold = true;
-      }
-      if (style.fontStyle === 'italic') {
-        excelCell.font.italic = true;
-      }
-      if (style.textDecoration && style.textDecoration.indexOf('underline') !== -1) {
-        excelCell.font.underline = true;
-      }
-    });
     
     // 检查标签本身的样式
     if (htmlCell.tagName === 'TH') {
@@ -102,6 +80,51 @@ export default {
     if (hasStrong) excelCell.font.bold = true;
     if (hasEm) excelCell.font.italic = true;
     if (hasU) excelCell.font.underline = true;
+  },
+  
+  /**
+   * 从内联子元素收集样式信息
+   * @param {HTMLElement} htmlCell - HTML单元格元素
+   * @param {Object} excelCell - Excel单元格对象
+   */
+  applyTextStylesFromInlineElements(htmlCell, excelCell) {
+    if (!htmlCell || !excelCell) {
+      return;
+    }
+    
+    // 检查是否有带样式的子元素
+    const styledElements = htmlCell.querySelectorAll('*[style]');
+    
+    Array.from(styledElements).forEach(function(elem) {
+      const style = elem.style;
+      
+      // 检查文本装饰
+      if (style.fontWeight === 'bold' || parseInt(style.fontWeight) >= 700) {
+        excelCell.font.bold = true;
+      }
+      if (style.fontStyle === 'italic') {
+        excelCell.font.italic = true;
+      }
+      if (style.textDecoration && style.textDecoration.indexOf('underline') !== -1) {
+        excelCell.font.underline = true;
+      }
+    });
+  },
+  
+  /**
+   * 从CSS样式应用文本样式
+   * @param {HTMLElement} htmlCell - HTML单元格元素
+   * @param {Object} excelCell - Excel单元格对象
+   * @param {CSSStyleDeclaration} inlineStyle - 内联样式
+   * @param {CSSStyleDeclaration} computedStyle - 计算样式
+   */
+  applyTextStylesFromCSS(htmlCell, excelCell, inlineStyle, computedStyle) {
+    if (!htmlCell || !excelCell || !inlineStyle) {
+      return;
+    }
+    
+    // 先应用内联子元素样式
+    this.applyTextStylesFromInlineElements(htmlCell, excelCell);
     
     // 字体粗细
     if (!excelCell.font.bold) {
@@ -129,15 +152,61 @@ export default {
         excelCell.font.underline = true;
       }
     }
-    
-    // 字体大小
-    if (fontSize) {
-      excelCell.font.size = Math.round(parseInt(fontSize) * 0.75);
-    } else if (inlineStyle.fontSize) {
-      excelCell.font.size = Math.round(parseInt(inlineStyle.fontSize) * 0.75);
-    } else if (computedStyle && computedStyle.fontSize) {
-      excelCell.font.size = Math.round(parseInt(computedStyle.fontSize) * 0.75);
+  },
+  
+  /**
+   * 应用字体大小
+   * @param {HTMLElement} htmlCell - HTML单元格元素
+   * @param {Object} excelCell - Excel单元格对象
+   * @param {CSSStyleDeclaration} inlineStyle - 内联样式
+   * @param {CSSStyleDeclaration} computedStyle - 计算样式
+   */
+  applyFontSize(htmlCell, excelCell, inlineStyle, computedStyle) {
+    if (!htmlCell || !excelCell) {
+      return;
     }
+    
+    // 查找所有带有fontSize样式的元素
+    let fontSize = this.findFontSizeInChildren(htmlCell);
+    
+    // 如果子元素中没有找到，检查自身样式
+    if (!fontSize && inlineStyle.fontSize) {
+      fontSize = inlineStyle.fontSize;
+    } 
+    // 最后使用计算样式
+    else if (!fontSize && computedStyle && computedStyle.fontSize) {
+      fontSize = computedStyle.fontSize;
+    }
+    
+    // 应用字体大小
+    if (fontSize) {
+      // 将px值转换为Excel的磅值 (大约是0.75倍)
+      excelCell.font.size = Math.round(parseInt(fontSize) * 0.75);
+    }
+  },
+  
+  /**
+   * 在子元素中查找字体大小
+   * @param {HTMLElement} htmlCell - HTML单元格元素
+   * @returns {String} - 字体大小
+   */
+  findFontSizeInChildren(htmlCell) {
+    if (!htmlCell) {
+      return '';
+    }
+    
+    let fontSize = '';
+    const styledElements = htmlCell.querySelectorAll('*[style]');
+    
+    for (let i = 0; i < styledElements.length; i++) {
+      const elem = styledElements[i];
+      if (elem.style.fontSize) {
+        fontSize = elem.style.fontSize;
+        break;
+      }
+    }
+    
+    return fontSize;
   },
   
   /**
@@ -153,15 +222,9 @@ export default {
     }
     
     // 收集颜色信息
-    let textColor = '';
-    let backgroundColor = '';
-    
-    const styledElements = htmlCell.querySelectorAll('*[style]');
-    Array.from(styledElements).forEach(function(elem) {
-      const style = elem.style;
-      if (style.color) textColor = style.color;
-      if (style.backgroundColor) backgroundColor = style.backgroundColor;
-    });
+    const colors = this.collectColorInfo(htmlCell);
+    const textColor = colors.textColor;
+    const backgroundColor = colors.backgroundColor;
     
     // 字体颜色
     if (textColor) {
@@ -200,6 +263,29 @@ export default {
         fgColor: { argb: argb }
       };
     }
+  },
+  
+  /**
+   * 收集单元格内元素的颜色信息
+   * @param {HTMLElement} htmlCell - HTML单元格元素
+   * @returns {Object} - 颜色信息对象
+   */
+  collectColorInfo(htmlCell) {
+    if (!htmlCell) {
+      return { textColor: '', backgroundColor: '' };
+    }
+    
+    let textColor = '';
+    let backgroundColor = '';
+    
+    const styledElements = htmlCell.querySelectorAll('*[style]');
+    Array.from(styledElements).forEach(function(elem) {
+      const style = elem.style;
+      if (style.color) textColor = style.color;
+      if (style.backgroundColor) backgroundColor = style.backgroundColor;
+    });
+    
+    return { textColor, backgroundColor };
   },
   
   /**
