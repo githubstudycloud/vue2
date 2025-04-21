@@ -29,17 +29,50 @@ export default {
     }
     
     try {
+      console.log('开始查找表格...');
       // 设置查找范围以同时支持v-if和v-show
       let elementsToCheck = null;
-      if (editorElement.querySelectorAll) {
+      
+      if (editorElement.querySelector && typeof editorElement.querySelector === 'function') {
         elementsToCheck = editorElement;
+        console.log('使用编辑器元素作为查找范围');
       } else {
         // 如果传入的不是DOM元素，则在整个document中查找
         elementsToCheck = document.body;
+        console.log('使用document.body作为查找范围');
       }
       
       // 获取所有表格，包括隐藏的（v-show会留在DOM中但display:none）
-      const tables = elementsToCheck.querySelectorAll('table');
+      // 首先尝试在编辑器内容区域查找表格
+      let tables = [];
+      
+      // 优先查找王编辑器的内容容器
+      const editorContentDiv = elementsToCheck.querySelector('.w-e-text') || 
+                              elementsToCheck.querySelector('.w-e-text-container') ||
+                              elementsToCheck;
+      
+      console.log('找到编辑器内容区域:', editorContentDiv ? '是' : '否');
+      
+      // 查找编辑器内容区域中的表格
+      if (editorContentDiv) {
+        tables = editorContentDiv.querySelectorAll('table');
+        console.log('在编辑器内容区域中找到表格数量:', tables.length);
+      }
+      
+      // 如果没有找到表格，尝试在整个编辑器元素中查找
+      if (!tables || tables.length === 0) {
+        tables = elementsToCheck.querySelectorAll('table');
+        console.log('在整个编辑器元素中找到表格数量:', tables.length);
+      }
+      
+      // 如果仍然没有找到表格，尝试查找iframe内的表格（某些编辑器模式下会使用iframe）
+      if ((!tables || tables.length === 0) && elementsToCheck.querySelector('iframe')) {
+        const editorIframe = elementsToCheck.querySelector('iframe');
+        if (editorIframe && editorIframe.contentDocument) {
+          tables = editorIframe.contentDocument.querySelectorAll('table');
+          console.log('在iframe中找到表格数量:', tables.length);
+        }
+      }
       
       if (!tables || tables.length === 0) {
         console.error('未找到可导出的表格');
@@ -57,30 +90,46 @@ export default {
         
         // 跳过嵌套表格（父表格中的子表格）
         if (ExcelTableHelper.isNestedTable(table)) {
+          console.log('跳过嵌套表格');
           continue;
         }
         
-        // 检查表格是否隐藏 (v-show)
-        const computedStyle = window.getComputedStyle(table);
-        if (computedStyle.display === 'none') {
-          // 临时显示表格以便处理
-          table.style.display = 'table';
-          table.dataset.tempDisplay = 'true';
+        // 打印表格信息便于调试
+        console.log('处理表格:', i, '已处理表格数:', processedCount);
+        console.log('- 表格行数:', table.rows ? table.rows.length : '无法获取');
+        
+        try {
+          // 预处理表格，修复潜在的结构问题
+          ExcelTableHelper.preprocessTable(table);
+          
+          // 检查表格是否隐藏 (v-show)
+          const computedStyle = window.getComputedStyle(table);
+          if (computedStyle.display === 'none') {
+            // 临时显示表格以便处理
+            table.style.display = 'table';
+            table.dataset.tempDisplay = 'true';
+            console.log('- 表格之前是隐藏的，已临时显示');
+          }
+          
+          // 添加工作表
+          const worksheet = workbook.addWorksheet(`表格${processedCount + 1}`);
+          
+          // 处理表格数据
+          this.processTable(table, worksheet);
+          
+          // 恢复临时显示的表格
+          if (table.dataset.tempDisplay === 'true') {
+            table.style.display = 'none';
+            delete table.dataset.tempDisplay;
+            console.log('- 恢复表格隐藏状态');
+          }
+          
+          processedCount++;
+          console.log('- 表格处理完成');
+        } catch (error) {
+          console.error(`处理表格 ${i} 时出错:`, error);
+          // 继续处理下一个表格
         }
-        
-        // 添加工作表
-        const worksheet = workbook.addWorksheet(`表格${processedCount + 1}`);
-        
-        // 处理表格数据
-        this.processTable(table, worksheet);
-        
-        // 恢复临时显示的表格
-        if (table.dataset.tempDisplay === 'true') {
-          table.style.display = 'none';
-          delete table.dataset.tempDisplay;
-        }
-        
-        processedCount++;
       }
       
       if (processedCount === 0) {
@@ -109,19 +158,46 @@ export default {
    */
   processTable(table, worksheet) {
     if (!table || !worksheet) {
+      console.error('处理表格: 表格或工作表对象为空');
       return;
     }
     
-    const rows = table.querySelectorAll('tr');
-    const skipCells = {};
-    // 存储合并单元格的信息，用于列宽计算
-    const mergedCellsInfo = {};
-    
-    // 处理所有行
-    this.processTableRows(rows, worksheet, skipCells, mergedCellsInfo);
-    
-    // 设置列宽和行高，传入合并单元格信息
-    this.optimizeTableDimensions(worksheet, mergedCellsInfo);
+    try {
+      console.log('开始处理表格...');
+      console.log('- 表格元素:', table.tagName, table.rows ? table.rows.length : 0, '行');
+      
+      // 验证表格有效性
+      if (!table.tagName || table.tagName.toUpperCase() !== 'TABLE') {
+        console.error('处理表格: 元素不是表格');
+        return;
+      }
+      
+      // 首先进行表格预处理
+      ExcelTableHelper.preprocessTable(table);
+      
+      // 获取表格行
+      const rows = table.querySelectorAll('tr');
+      if (!rows || rows.length === 0) {
+        console.error('处理表格: 表格没有行元素');
+        return;
+      }
+      
+      console.log(`- 表格共有 ${rows.length} 行`);
+      
+      const skipCells = {};
+      // 存储合并单元格的信息，用于列宽计算
+      const mergedCellsInfo = {};
+      
+      // 处理所有行
+      this.processTableRows(rows, worksheet, skipCells, mergedCellsInfo);
+      
+      // 设置列宽和行高，传入合并单元格信息
+      this.optimizeTableDimensions(worksheet, mergedCellsInfo);
+      
+      console.log('表格处理完成');
+    } catch (error) {
+      console.error('处理表格时出错:', error);
+    }
   },
   
   /**
@@ -153,16 +229,41 @@ export default {
   processRowCells(cells, worksheet, rowIndex, startColIndex, skipCells, mergedCellsInfo) {
     let colIndex = startColIndex;
     
-    Array.from(cells).forEach(function(cell) {
-      // 检查是否需要跳过当前单元格
-      colIndex = this.findNextAvailableColumn(rowIndex, colIndex, skipCells);
+    try {
+      if (!cells || cells.length === 0) {
+        console.warn(`行 ${rowIndex+1} 没有单元格元素`);
+        return;
+      }
       
-      // 处理单个单元格
-      this.processCell(cell, worksheet, rowIndex, colIndex, skipCells, mergedCellsInfo);
+      console.log(`处理第 ${rowIndex+1} 行，共 ${cells.length} 个单元格`);
       
-      // 更新列索引
-      colIndex += parseInt(cell.getAttribute('colspan')) || 1;
-    }, this);
+      Array.from(cells).forEach(function(cell, cellIndex) {
+        try {
+          // 检查是否需要跳过当前单元格
+          colIndex = this.findNextAvailableColumn(rowIndex, colIndex, skipCells);
+          
+          // 记录当前处理的单元格信息便于调试
+          const colspan = parseInt(cell.getAttribute('colspan')) || 1;
+          const rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
+          
+          if (colspan > 1 || rowspan > 1) {
+            console.log(`- 单元格 [${rowIndex+1},${colIndex}] 有合并: colspan=${colspan}, rowspan=${rowspan}`);
+          }
+          
+          // 处理单个单元格
+          this.processCell(cell, worksheet, rowIndex, colIndex, skipCells, mergedCellsInfo);
+          
+          // 更新列索引
+          colIndex += colspan;
+        } catch (cellError) {
+          console.error(`处理单元格 [${rowIndex+1},${colIndex}] 时出错:`, cellError);
+          // 继续处理下一个单元格
+          colIndex += parseInt(cell.getAttribute('colspan')) || 1;
+        }
+      }, this);
+    } catch (error) {
+      console.error(`处理行 ${rowIndex+1} 的单元格时出错:`, error);
+    }
   },
   
   /**
@@ -190,24 +291,64 @@ export default {
    * @param {Object} mergedCellsInfo - 合并单元格信息
    */
   processCell(cell, worksheet, rowIndex, colIndex, skipCells, mergedCellsInfo) {
-    // 获取单元格内容
-    const text = ExcelTableHelper.getCellContent(cell);
-    
-    // 设置单元格值
-    const excelCell = worksheet.getCell(rowIndex + 1, colIndex);
-    excelCell.value = text;
-    
-    // 应用样式
-    ExcelStyleHelper.applyCellStyle(cell, excelCell);
-    
-    // 记录合并单元格信息
-    const colspan = parseInt(cell.getAttribute('colspan')) || 1;
-    if (colspan > 1) {
-      this.recordMergedCellInfo(mergedCellsInfo, colIndex, colspan, text);
+    try {
+      if (!cell || !worksheet) {
+        console.warn(`处理单元格 [${rowIndex+1},${colIndex}]: 单元格或工作表对象为空`);
+        return;
+      }
+      
+      // 检查单元格类型
+      const cellType = cell.tagName ? cell.tagName.toLowerCase() : 'unknown';
+      const isHeader = cellType === 'th';
+      
+      // 获取单元格内容
+      let text = '';
+      try {
+        text = ExcelTableHelper.getCellContent(cell);
+      } catch (contentError) {
+        console.error(`获取单元格 [${rowIndex+1},${colIndex}] 内容时出错:`, contentError);
+        text = cell.textContent ? cell.textContent.trim() : ' ';
+      }
+      
+      // 设置单元格值
+      const excelRowIndex = rowIndex + 1; // Excel的行索引从1开始
+      const excelCell = worksheet.getCell(excelRowIndex, colIndex);
+      excelCell.value = text;
+      
+      // 设置单元格类型相关的默认样式
+      if (isHeader) {
+        excelCell.font = {
+          bold: true
+        };
+      }
+      
+      // 应用样式
+      try {
+        ExcelStyleHelper.applyCellStyle(cell, excelCell);
+      } catch (styleError) {
+        console.error(`应用单元格 [${rowIndex+1},${colIndex}] 样式时出错:`, styleError);
+        // 还是应用基本样式确保Excel的表格显示正常
+        ExcelStyleHelper.applyBorderStyles(excelCell);
+      }
+      
+      // 记录合并单元格信息
+      const colspan = parseInt(cell.getAttribute('colspan')) || 1;
+      if (colspan > 1) {
+        this.recordMergedCellInfo(mergedCellsInfo, colIndex, colspan, text);
+      }
+      
+      // 处理合并单元格
+      try {
+        const rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
+        if (colspan > 1 || rowspan > 1) {
+          ExcelTableHelper.handleMergedCells(cell, worksheet, rowIndex, colIndex, skipCells);
+        }
+      } catch (mergeError) {
+        console.error(`处理单元格 [${rowIndex+1},${colIndex}] 合并时出错:`, mergeError);
+      }
+    } catch (error) {
+      console.error(`处理单元格 [${rowIndex+1},${colIndex}] 时出现意外错误:`, error);
     }
-    
-    // 处理合并单元格
-    ExcelTableHelper.handleMergedCells(cell, worksheet, rowIndex, colIndex, skipCells);
   },
   
   /**

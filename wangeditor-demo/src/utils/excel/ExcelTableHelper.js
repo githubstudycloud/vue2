@@ -13,11 +13,24 @@ export default {
       return false;
     }
     
+    // 检查父元素是否包含表格
     let parent = table.parentElement;
     while (parent) {
-      if (parent.tagName === 'TABLE') {
+      if (parent.tagName && parent.tagName.toUpperCase() === 'TABLE') {
         return true;
       }
+      
+      // 检查TD或TH单元格 - 这通常表示嵌套表格
+      if (parent.tagName && (parent.tagName.toUpperCase() === 'TD' || parent.tagName.toUpperCase() === 'TH')) {
+        let cellParent = parent.parentElement;
+        while (cellParent) {
+          if (cellParent.tagName && cellParent.tagName.toUpperCase() === 'TABLE') {
+            return true;
+          }
+          cellParent = cellParent.parentElement;
+        }
+      }
+      
       parent = parent.parentElement;
     }
     return false;
@@ -33,15 +46,74 @@ export default {
       return '';
     }
     
-    // 处理包含嵌套表格的单元格
-    const nestedTable = cell.querySelector('table');
-    if (nestedTable) {
-      // 将嵌套表格转换为文本内容
-      return this.convertNestedTableToText(nestedTable);
-    } else {
-      // 获取单元格文本内容
-      return cell.textContent.trim();
+    try {
+      // 检查单元格是否为空
+      if (!cell.textContent || cell.textContent.trim() === '') {
+        return ' '; // 返回空格而非空字符串，确保表格边框正确显示
+      }
+      
+      // 处理包含嵌套表格的单元格
+      const nestedTable = cell.querySelector('table');
+      if (nestedTable) {
+        // 将嵌套表格转换为文本内容
+        return this.convertNestedTableToText(nestedTable);
+      }
+      
+      // 检查是否包含复杂内容（图片、列表等）
+      if (cell.querySelector('img, ul, ol')) {
+        // 处理包含特殊元素的单元格
+        return this.extractFormattedContent(cell);
+      }
+      
+      // 获取单元格文本内容，保留基本格式
+      return cell.textContent.trim() || ' ';
+    } catch (error) {
+      console.error('获取单元格内容失败:', error);
+      return cell.textContent ? cell.textContent.trim() : ' ';
     }
+  },
+  
+  /**
+   * 提取单元格格式化内容
+   * @param {HTMLElement} cell - 单元格元素
+   * @returns {String} - 格式化内容
+   */
+  extractFormattedContent(cell) {
+    if (!cell) {
+      return '';
+    }
+    
+    let content = '';
+    
+    // 处理图片
+    const images = cell.querySelectorAll('img');
+    if (images && images.length > 0) {
+      Array.from(images).forEach(function(img) {
+        content += '[Image]';
+      });
+    }
+    
+    // 处理列表
+    const lists = cell.querySelectorAll('ul, ol');
+    if (lists && lists.length > 0) {
+      Array.from(lists).forEach(function(list) {
+        const listItems = list.querySelectorAll('li');
+        Array.from(listItems).forEach(function(item, index) {
+          if (list.tagName.toLowerCase() === 'ol') {
+            content += (index + 1) + '. ' + item.textContent.trim() + '\n';
+          } else {
+            content += '- ' + item.textContent.trim() + '\n';
+          }
+        });
+      });
+    }
+    
+    // 如果没有上述特殊内容，则直接返回文本
+    if (!content) {
+      content = cell.textContent.trim();
+    }
+    
+    return content || ' ';
   },
   
   /**
@@ -218,39 +290,109 @@ markSkippedCells(skipCells, rowIndex, colIndex, rowspan, colspan) {
    */
   preprocessTable(table) {
     if (!table) {
+      console.warn('预处理表格: 传入的表格元素为空');
       return;
     }
     
-    // 处理空单元格
-    const cells = table.querySelectorAll('td, th');
-    Array.from(cells).forEach(function(cell) {
-      if (!cell.textContent.trim() && !cell.querySelector('table')) {
-        // 为空单元格添加空格，确保Excel中显示边框
-        cell.innerHTML = '&nbsp;';
-      }
-    });
+    console.log('开始预处理表格...');
     
-    // 检查是否有不完整的行/列（修复一些情况下表格结构不完整的问题）
-    const rows = table.querySelectorAll('tr');
-    if (rows.length > 0) {
-      // 查找最大列数
-      let maxCols = 0;
-      Array.from(rows).forEach(function(row) {
-        const cols = row.querySelectorAll('td, th').length;
-        maxCols = Math.max(maxCols, cols);
-      });
+    try {
+      // 验证表格基本结构
+      if (!table.tagName || table.tagName.toUpperCase() !== 'TABLE') {
+        console.warn('预处理表格: 元素不是表格');
+        return;
+      }
       
-      // 为不完整的行添加缺失的单元格
-      Array.from(rows).forEach(function(row) {
-        const cols = row.querySelectorAll('td, th').length;
-        if (cols < maxCols) {
-          for (let i = cols; i < maxCols; i++) {
-            const newCell = document.createElement('td');
-            newCell.innerHTML = '&nbsp;';
-            row.appendChild(newCell);
+      console.log('- 检查表格结构有效性');
+      
+      // 确保表格有tbody
+      if (!table.querySelector('tbody')) {
+        console.log('- 表格缺少tbody元素，创建它');
+        const tbody = document.createElement('tbody');
+        // 将所有没有包裹在tbody中的tr移动到新tbody中
+        const rows = table.querySelectorAll('tr');
+        let needsReparent = false;
+        
+        Array.from(rows).forEach(function(row) {
+          if (row.parentElement.tagName.toUpperCase() !== 'TBODY') {
+            needsReparent = true;
+            tbody.appendChild(row);
           }
+        });
+        
+        if (needsReparent) {
+          table.appendChild(tbody);
+        }
+      }
+      
+      console.log('- 处理空单元格');
+      // 处理空单元格
+      const cells = table.querySelectorAll('td, th');
+      Array.from(cells).forEach(function(cell) {
+        if ((!cell.textContent || cell.textContent.trim() === '') && !cell.querySelector('table, img, ul, ol')) {
+          // 为空单元格添加空格，确保Excel中显示边框
+          cell.innerHTML = '&nbsp;';
         }
       });
+      
+      console.log('- 检查和修复行列结构');
+      // 检查是否有不完整的行/列（修复一些情况下表格结构不完整的问题）
+      const rows = table.querySelectorAll('tr');
+      if (rows.length > 0) {
+        // 查找最大列数
+        let maxCols = 0;
+        let totalCellsCount = 0;
+        
+        Array.from(rows).forEach(function(row) {
+          const rowCells = row.querySelectorAll('td, th');
+          let effectiveColCount = 0;
+          
+          // 计算有效列数，考虑colspan
+          Array.from(rowCells).forEach(function(cell) {
+            const colspan = parseInt(cell.getAttribute('colspan')) || 1;
+            effectiveColCount += colspan;
+          });
+          
+          maxCols = Math.max(maxCols, effectiveColCount);
+          totalCellsCount += rowCells.length;
+        });
+        
+        console.log(`- 表格有 ${rows.length} 行, ${totalCellsCount} 个单元格, 最大列数 ${maxCols}`);
+        
+        // 为不完整的行添加缺失的单元格
+        Array.from(rows).forEach(function(row, rowIndex) {
+          const rowCells = row.querySelectorAll('td, th');
+          let effectiveColCount = 0;
+          
+          // 计算当前行的有效列数
+          Array.from(rowCells).forEach(function(cell) {
+            const colspan = parseInt(cell.getAttribute('colspan')) || 1;
+            effectiveColCount += colspan;
+          });
+          
+          // 如果列数不足，添加缺失的单元格
+          if (effectiveColCount < maxCols) {
+            console.log(`- 第 ${rowIndex+1} 行列数不足，添加 ${maxCols - effectiveColCount} 个单元格`);
+            for (let i = effectiveColCount; i < maxCols; i++) {
+              const newCell = document.createElement('td');
+              newCell.innerHTML = '&nbsp;';
+              row.appendChild(newCell);
+            }
+          }
+        });
+      } else {
+        console.warn('- 表格没有行元素');
+      }
+      
+      // 处理潜在的嵌套表格问题
+      const nestedTables = table.querySelectorAll('table');
+      if (nestedTables && nestedTables.length > 0) {
+        console.log(`- 发现 ${nestedTables.length} 个嵌套表格`);
+      }
+      
+      console.log('表格预处理完成');
+    } catch (error) {
+      console.error('预处理表格时出错:', error);
     }
   },
   

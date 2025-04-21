@@ -131,7 +131,50 @@ export default {
     
     getEditorElement() {
       // 返回编辑器DOM元素，用于导出表格
-      return this.editor ? this.editor.getEditableContainer() : null;
+      if (!this.editor) {
+        console.error('编辑器未初始化');
+        return null;
+      }
+      
+      try {
+        // 先尝试获取内容区容器
+        let container = this.editor.getEditableContainer();
+        
+        // 如果获取成功，检查容器是否包含表格
+        if (container && container.querySelector) {
+          // 查找表格元素
+          const tables = container.querySelectorAll('table');
+          
+          if (tables && tables.length > 0) {
+            console.log('在编辑器容器中找到表格:', tables.length, '个');
+            return container;
+          } else {
+            console.warn('在编辑器容器中未找到表格，将尝试使用DOM选择器');
+          }
+        }
+        
+        // 如果上述方法未找到表格，尝试使用DOM选择器
+        const editorContainer = document.querySelector('.w-e-text-container');
+        const textArea = editorContainer ? editorContainer.querySelector('.w-e-text') : null;
+        
+        if (textArea) {
+          const tableElements = textArea.querySelectorAll('table');
+          console.log('在文本区域中找到表格:', tableElements ? tableElements.length : 0, '个');
+          
+          if (tableElements && tableElements.length > 0) {
+            return textArea;
+          }
+        }
+        
+        // 默认返回编辑器元素
+        return container;
+      } catch (error) {
+        console.error('获取编辑器元素时出错:', error);
+        // 应急处理，返回全局最外层者
+        return document.querySelector('.rich-editor .editor-content') || 
+               document.querySelector('.rich-editor') || 
+               document.body;
+      }
     },
     
     setContent(content) {
