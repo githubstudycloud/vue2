@@ -77,42 +77,63 @@ export default {
     return text;
   },
   
-  /**
-   * 处理合并单元格
-   * @param {HTMLElement} cell - 单元格元素
-   * @param {Object} worksheet - 工作表对象
-   * @param {Number} rowIndex - 行索引
-   * @param {Number} colIndex - 列索引
-   * @param {Object} skipCells - 跳过的单元格记录
-   */
-  handleMergedCells(cell, worksheet, rowIndex, colIndex, skipCells) {
-    if (!cell || !worksheet) {
-      return;
-    }
-    
-    const colspan = parseInt(cell.getAttribute('colspan')) || 1;
-    const rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
-    
-    if (colspan > 1 || rowspan > 1) {
-      // 应用合并单元格
-      worksheet.mergeCells(
-        rowIndex + 1,
-        colIndex,
-        rowIndex + rowspan,
-        colIndex + colspan - 1
-      );
-      
-      // 标记被合并的单元格，以便跳过处理
-      for (let i = 0; i < rowspan; i++) {
-        for (let j = 0; j < colspan; j++) {
-          if (i !== 0 || j !== 0) {
-            skipCells[`${rowIndex + 1 + i},${colIndex + j}`] = true;
-          }
-        }
+
+/**
+ * 处理合并单元格
+ * @param {HTMLElement} cell - 单元格元素
+ * @param {Object} worksheet - 工作表对象
+ * @param {Number} rowIndex - 行索引
+ * @param {Number} colIndex - 列索引
+ * @param {Object} skipCells - 跳过的单元格记录
+ */
+handleMergedCells(cell, worksheet, rowIndex, colIndex, skipCells) {
+  if (!cell || !worksheet) {
+    return;
+  }
+
+  const colspan = parseInt(cell.getAttribute('colspan')) || 1;
+  const rowspan = parseInt(cell.getAttribute('rowspan')) || 1;
+
+  if (colspan > 1 || rowspan > 1) {
+    this.applyMergeCells(worksheet, rowIndex, colIndex, rowspan, colspan);
+    this.markSkippedCells(skipCells, rowIndex, colIndex, rowspan, colspan);
+  }
+},
+
+/**
+ * 应用合并单元格
+ * @param {Object} worksheet - 工作表对象
+ * @param {Number} rowIndex - 行索引
+ * @param {Number} colIndex - 列索引
+ * @param {Number} rowspan - 行合并数量
+ * @param {Number} colspan - 列合并数量
+ */
+applyMergeCells(worksheet, rowIndex, colIndex, rowspan, colspan) {
+  worksheet.mergeCells(
+    rowIndex + 1,
+    colIndex,
+    rowIndex + rowspan,
+    colIndex + colspan - 1
+  );
+},
+
+/**
+ * 标记被合并的单元格
+ * @param {Object} skipCells - 跳过的单元格记录
+ * @param {Number} rowIndex - 行索引
+ * @param {Number} colIndex - 列索引
+ * @param {Number} rowspan - 行合并数量
+ * @param {Number} colspan - 列合并数量
+ */
+markSkippedCells(skipCells, rowIndex, colIndex, rowspan, colspan) {
+  for (let i = 0; i < rowspan; i++) {
+    for (let j = 0; j < colspan; j++) {
+      if (i !== 0 || j !== 0) {
+        skipCells[`${rowIndex + 1 + i},${colIndex + j}`] = true;
       }
     }
-  },
-  
+  }
+},
   /**
    * 查找v-if隐藏的表格
    * 注: 这个方法用于在DOM中查找通过v-if条件渲染的表格
@@ -233,62 +254,53 @@ export default {
     }
   },
   
-  /**
-   * 处理表格列宽度
-   * @param {HTMLTableElement} table - 表格元素
-   * @returns {Array} - 列宽度数组
-   */
-  getTableColumnWidths(table) {
-    if (!table) {
-      return [];
-    }
-    
-    // 获取表格的列宽度信息
-    const colWidths = [];
-    const cols = table.querySelectorAll('col');
-    
-    // 如果有col元素，使用这些信息
-    if (cols.length > 0) {
-      Array.from(cols).forEach(function(col) {
-        let width = col.style.width || '';
-        // 将宽度值转换为数字
-        if (width) {
-          if (width.endsWith('px')) {
-            width = parseFloat(width);
-          } else if (width.endsWith('%')) {
-            // 百分比宽度转换为相对值，基准为60
-            width = parseFloat(width) * 0.6;
-          } else {
-            width = parseFloat(width);
-          }
-          colWidths.push(width || 10); // 默认宽度为10
-        } else {
-          colWidths.push(10); // 默认宽度
-        }
-      });
-    } else {
-      // 如果没有col元素，检查第一行的单元格宽度
-      const firstRow = table.querySelector('tr');
-      if (firstRow) {
-        const cells = firstRow.querySelectorAll('th, td');
-        Array.from(cells).forEach(function(cell) {
-          let width = cell.style.width || '';
-          if (width) {
-            if (width.endsWith('px')) {
-              width = parseFloat(width);
-            } else if (width.endsWith('%')) {
-              width = parseFloat(width) * 0.6;
-            } else {
-              width = parseFloat(width);
-            }
-            colWidths.push(width || 10);
-          } else {
-            colWidths.push(10);
-          }
-        });
-      }
-    }
-    
-    return colWidths;
+/**
+ * 处理表格列宽度
+ * @param {HTMLTableElement} table - 表格元素
+ * @returns {Array} - 列宽度数组
+ */
+getTableColumnWidths(table) {
+  if (!table) {
+    return [];
   }
+
+  // 获取表格的列宽度信息
+  const colWidths = [];
+  const cols = table.querySelectorAll('col');
+
+  // 解析宽度值为数字
+  const parseWidth = (widthStr) => {
+    if (!widthStr) return 10; // 默认宽度
+
+    if (widthStr.endsWith('px')) {
+      return parseFloat(widthStr) || 10;
+    } else if (widthStr.endsWith('%')) {
+      // 百分比宽度转换为相对值，基准为60
+      return (parseFloat(widthStr) * 0.6) || 10;
+    }
+    return parseFloat(widthStr) || 10;
+  };
+
+  // 处理元素集合中的宽度
+  const processElementWidths = (elements) => {
+    Array.from(elements).forEach(element => {
+      const width = element.style.width || '';
+      colWidths.push(parseWidth(width));
+    });
+  };
+
+  // 优先使用col元素的宽度
+  if (cols.length > 0) {
+    processElementWidths(cols);
+  } else {
+    // 如果没有col元素，使用第一行单元格的宽度
+    const firstRow = table.querySelector('tr');
+    if (firstRow) {
+      const cells = firstRow.querySelectorAll('th, td');
+      processElementWidths(cells);
+    }
+  }
+
+  return colWidths;
+}
 };
