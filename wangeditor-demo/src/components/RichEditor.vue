@@ -53,6 +53,20 @@ export default {
       editorConfig: {
         placeholder: '请输入内容...',
         autoFocus: false,
+        hoverbarKeys: {
+          // 表格元素的悬浮菜单配置
+          table: {
+            menuKeys: [
+              'tableHeader',
+              'tableFullWidth',
+              'insertTableRow',
+              'deleteTableRow',
+              'insertTableCol',
+              'deleteTableCol',
+              'deleteTable'
+            ]
+          }
+        },
         MENU_CONF: {
           // 表格配置
           insertTable: {
@@ -134,48 +148,33 @@ export default {
       }
 
       try {
-        // 确保编辑器获得焦点
-        this.editor.focus();
+        // 清空编辑器内容
+        this.editor.clear();
         
-        // 先尝试禁用编辑
-        this.editor.disable();
+        // 设置新内容
+        if (content) {
+          console.log('设置新内容');
+          // 使用 DOM 操作的方式设置内容，避免解析错误
+          const wrapDiv = document.createElement('div');
+          wrapDiv.innerHTML = content;
+          this.editor.setHtml(wrapDiv.innerHTML);
+          this.editorHtml = wrapDiv.innerHTML;
+        } else {
+          // 如果内容为空，显示默认示例
+          console.log('设置默认内容');
+          const defaultContent = getAdvancedNestedTableHTML();
+          const wrapDiv = document.createElement('div');
+          wrapDiv.innerHTML = defaultContent;
+          this.editor.setHtml(wrapDiv.innerHTML);
+          this.editorHtml = wrapDiv.innerHTML;
+        }
         
-        setTimeout(() => {
-          // 清空内容
-          this.editor.clear();
-          
-          // 重新启用编辑器
-          this.editor.enable();
-          
-          // 设置新内容
-          if (content) {
-            console.log('设置新内容');
-            this.editor.setHtml(content);
-            this.editorHtml = content;
-          } else {
-            // 如果内容为空，显示默认示例
-            console.log('设置默认内容');
-            const defaultContent = getAdvancedNestedTableHTML();
-            this.editor.setHtml(defaultContent);
-            this.editorHtml = defaultContent;
-          }
-          
-          // 更新状态
-          this.$emit('input', this.editorHtml);
-          console.log('内容设置完成', this.editor.getHtml().length);
-          
-          // 确保编辑器再次获得焦点
-          this.editor.focus();
-        }, 150);
+        // 更新状态
+        this.$emit('input', this.editorHtml);
+        console.log('内容设置完成', this.editor.getHtml().length);
         
       } catch (error) {
         console.error('设置编辑器内容失败:', error);
-        // 尝试恢复编辑器状态
-        try {
-          this.editor.enable();
-        } catch (e) {
-          console.error('重新启用编辑器失败:', e);
-        }
       }
     }
   }
