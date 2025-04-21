@@ -122,16 +122,31 @@ export default {
     
     setContent(content) {
       // 设置编辑器内容
-      if (this.editor) {
+      if (!this.editor) {
+        // 如果编辑器未初始化，延迟执行
+        setTimeout(() => {
+          this.setContent(content);
+        }, 100);
+        return;
+      }
+
+      try {
+        // 清空编辑器
         this.editor.clear();
+        
+        // 设置新内容
         if (content) {
-          this.editor.dangerouslyInsertHtml(content);
+          this.editor.setHtml(content);
         } else {
           // 如果内容为空，显示默认示例
-          this.editor.dangerouslyInsertHtml(getAdvancedNestedTableHTML());
+          this.editor.setHtml(getAdvancedNestedTableHTML());
         }
+        
+        // 更新状态
         this.editorHtml = this.editor.getHtml();
         this.$emit('input', this.editorHtml);
+      } catch (error) {
+        console.error('设置编辑器内容失败:', error);
       }
     }
   }

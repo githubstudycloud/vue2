@@ -41,8 +41,16 @@ export default {
       currentExample: 'default'
     }
   },
+  mounted() {
+    // 页面加载时，默认显示默认示例
+    this.currentExample = 'default';
+  },
   methods: {
     switchExample(exampleType) {
+      if (this.currentExample === exampleType) {
+        return; // 如果是同一个示例，不需要切换
+      }
+      
       let content = '';
       
       switch (exampleType) {
@@ -65,9 +73,13 @@ export default {
       }
       
       this.currentExample = exampleType;
-      if (this.$refs.editor) {
-        this.$refs.editor.setContent(content);
-      }
+      
+      // 确保编辑器已经初始化
+      this.$nextTick(() => {
+        if (this.$refs.editor) {
+          this.$refs.editor.setContent(content);
+        }
+      });
     },
     
     exportToExcel() {
