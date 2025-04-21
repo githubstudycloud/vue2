@@ -12,7 +12,7 @@
     "@wangeditor/editor": "^5.1.23",
     "@wangeditor/editor-for-vue": "^1.0.2",
     "xlsx": "^0.18.5",
-    "xlsx-style-vite": "^0.0.2",
+    "exceljs": "^4.3.0",
     "file-saver": "^2.0.5",
     "core-js": "^3.8.3"
   },

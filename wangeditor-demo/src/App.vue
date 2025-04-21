@@ -6,7 +6,9 @@
     </div>
     <div class="button-container">
       <button @click="exportToExcel">导出为Excel</button>
-      <button @click="exportToExcelFull" class="full-button">导出为Excel (增强版)</button>
+      <button @click="exportToExcelPro" class="pro-button">导出为Excel (增强版)</button>
+      <button @click="exportWithExcelJS" class="exceljs-button">导出为Excel (ExcelJS版)</button>
+      <button @click="exportWithExcelJSFixed" class="fixed-button">导出为Excel (修复版)</button>
     </div>
   </div>
 </template>
@@ -14,7 +16,9 @@
 <script>
 import RichEditor from './components/RichEditor.vue';
 import ExcelExporter from './utils/ExcelExporter';
-import ExcelExporterFull from './utils/ExcelExporterFull';
+import ExcelExporterPro from './utils/ExcelExporterPro';
+import ExcelJSExporter from './utils/ExcelJSExporter';
+import ExcelJSExporterFixed from './utils/ExcelJSExporterFixed';
 
 export default {
   name: 'App',
@@ -41,14 +45,50 @@ export default {
       }
     },
     
-    async exportToExcelFull() {
+    exportToExcelPro() {
       if (!this.$refs.editor) {
         alert('编辑器不可用');
         return;
       }
       
       const editorElement = this.$refs.editor.getEditorElement();
-      const success = await ExcelExporterFull.exportTableToExcel(editorElement);
+      const success = ExcelExporterPro.exportTableToExcel(editorElement);
+      
+      if (!success) {
+        alert('导出失败，请确保编辑器中有表格内容');
+      }
+    },
+    
+    async exportWithExcelJS() {
+      if (!this.$refs.editor) {
+        alert('编辑器不可用');
+        return;
+      }
+      
+      const editorElement = this.$refs.editor.getEditorElement();
+      const success = await ExcelJSExporter.exportTableToExcel(editorElement);
+      
+      if (!success) {
+        alert('导出失败，请确保编辑器中有表格内容');
+      }
+    },
+    
+    async exportWithExcelJSFixed() {
+      if (!this.$refs.editor) {
+        alert('编辑器不可用');
+        return;
+      }
+      
+      console.log('===========================');
+      console.log('开始导出Excel (修复版)');
+      console.log('===========================');
+      
+      const editorElement = this.$refs.editor.getEditorElement();
+      const success = await ExcelJSExporterFixed.exportTableToExcel(editorElement);
+      
+      console.log('===========================');
+      console.log('导出完成，结果:', success ? '成功' : '失败');
+      console.log('===========================');
       
       if (!success) {
         alert('导出失败，请确保编辑器中有表格内容');
@@ -80,6 +120,10 @@ export default {
 
 .button-container {
   margin: 20px 0;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 button {
@@ -90,7 +134,7 @@ button {
   text-align: center;
   text-decoration: none;
   display: inline-block;
-  font-size: 16px;
+  font-size: 14px;
   margin: 4px 2px;
   cursor: pointer;
   border-radius: 4px;
@@ -100,11 +144,27 @@ button:hover {
   background-color: #45a049;
 }
 
-.full-button {
+.pro-button {
   background-color: #2196F3;
 }
 
-.full-button:hover {
+.pro-button:hover {
   background-color: #1976D2;
+}
+
+.exceljs-button {
+  background-color: #9C27B0;
+}
+
+.exceljs-button:hover {
+  background-color: #7B1FA2;
+}
+
+.fixed-button {
+  background-color: #FF5722;
+}
+
+.fixed-button:hover {
+  background-color: #E64A19;
 }
 </style>

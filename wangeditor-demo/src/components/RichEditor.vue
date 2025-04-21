@@ -24,7 +24,7 @@
 <script>
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue';
 import '@wangeditor/editor/dist/css/style.css';
-import { getNestedTableHTML } from '../utils/TableExamples';
+import { getAdvancedNestedTableHTML } from '../utils/EnhancedTableExamples';
 
 export default {
   name: 'RichEditor',
@@ -90,7 +90,7 @@ export default {
       this.editor = editor;
       
       // 设置初始内容
-      const initialContent = this.value || getNestedTableHTML();
+      const initialContent = this.value || getAdvancedNestedTableHTML();
       this.editorHtml = initialContent;
       
       // 若初始时没有内容，editor.setHtml无效，需要一个setTimeout
