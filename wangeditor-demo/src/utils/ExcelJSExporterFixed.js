@@ -117,41 +117,97 @@ export default {
     // 存储合并单元格的信息，用于列宽计算
     const mergedCellsInfo = {};
     
+    // 处理所有行
+    this.processTableRows(rows, worksheet, skipCells, mergedCellsInfo);
+    
+    // 设置列宽和行高，传入合并单元格信息
+    this.optimizeTableDimensions(worksheet, mergedCellsInfo);
+  },
+  
+  /**
+   * 处理表格的所有行
+   * @param {NodeList} rows - 行元素集合
+   * @param {Object} worksheet - 工作表对象
+   * @param {Object} skipCells - 跳过的单元格记录
+   * @param {Object} mergedCellsInfo - 合并单元格信息
+   */
+  processTableRows(rows, worksheet, skipCells, mergedCellsInfo) {
     Array.from(rows).forEach(function(row, rowIndex) {
       const cells = row.querySelectorAll('th, td');
       let colIndex = 1; // ExcelJS中列索引从1开始
       
-      Array.from(cells).forEach(function(cell) {
-        // 检查是否需要跳过当前单元格
-        while (skipCells[`${rowIndex + 1},${colIndex}`]) {
-          colIndex++;
-        }
-        
-        // 获取单元格内容
-        const text = ExcelTableHelper.getCellContent(cell);
-        
-        // 设置单元格值
-        const excelCell = worksheet.getCell(rowIndex + 1, colIndex);
-        excelCell.value = text;
-        
-        // 应用样式
-        ExcelStyleHelper.applyCellStyle(cell, excelCell);
-        
-        // 记录合并单元格信息
-        const colspan = parseInt(cell.getAttribute('colspan')) || 1;
-        if (colspan > 1) {
-          this.recordMergedCellInfo(mergedCellsInfo, colIndex, colspan, text);
-        }
-        
-        // 处理合并单元格
-        ExcelTableHelper.handleMergedCells(cell, worksheet, rowIndex, colIndex, skipCells);
-        
-        colIndex += colspan;
-      }, this);
+      // 处理行中的所有单元格
+      this.processRowCells(cells, worksheet, rowIndex, colIndex, skipCells, mergedCellsInfo);
     }, this);
+  },
+  
+  /**
+   * 处理行中的所有单元格
+   * @param {NodeList} cells - 单元格元素集合
+   * @param {Object} worksheet - 工作表对象
+   * @param {Number} rowIndex - 行索引
+   * @param {Number} startColIndex - 起始列索引
+   * @param {Object} skipCells - 跳过的单元格记录
+   * @param {Object} mergedCellsInfo - 合并单元格信息
+   */
+  processRowCells(cells, worksheet, rowIndex, startColIndex, skipCells, mergedCellsInfo) {
+    let colIndex = startColIndex;
     
-    // 设置列宽和行高，传入合并单元格信息
-    this.optimizeTableDimensions(worksheet, mergedCellsInfo);
+    Array.from(cells).forEach(function(cell) {
+      // 检查是否需要跳过当前单元格
+      colIndex = this.findNextAvailableColumn(rowIndex, colIndex, skipCells);
+      
+      // 处理单个单元格
+      this.processCell(cell, worksheet, rowIndex, colIndex, skipCells, mergedCellsInfo);
+      
+      // 更新列索引
+      colIndex += parseInt(cell.getAttribute('colspan')) || 1;
+    }, this);
+  },
+  
+  /**
+   * 查找下一个可用列
+   * @param {Number} rowIndex - 行索引
+   * @param {Number} startColIndex - 起始列索引
+   * @param {Object} skipCells - 跳过的单元格记录
+   * @returns {Number} - 下一个可用列索引
+   */
+  findNextAvailableColumn(rowIndex, startColIndex, skipCells) {
+    let colIndex = startColIndex;
+    while (skipCells[`${rowIndex + 1},${colIndex}`]) {
+      colIndex++;
+    }
+    return colIndex;
+  },
+  
+  /**
+   * 处理单个单元格
+   * @param {HTMLElement} cell - 单元格元素
+   * @param {Object} worksheet - 工作表对象
+   * @param {Number} rowIndex - 行索引
+   * @param {Number} colIndex - 列索引
+   * @param {Object} skipCells - 跳过的单元格记录
+   * @param {Object} mergedCellsInfo - 合并单元格信息
+   */
+  processCell(cell, worksheet, rowIndex, colIndex, skipCells, mergedCellsInfo) {
+    // 获取单元格内容
+    const text = ExcelTableHelper.getCellContent(cell);
+    
+    // 设置单元格值
+    const excelCell = worksheet.getCell(rowIndex + 1, colIndex);
+    excelCell.value = text;
+    
+    // 应用样式
+    ExcelStyleHelper.applyCellStyle(cell, excelCell);
+    
+    // 记录合并单元格信息
+    const colspan = parseInt(cell.getAttribute('colspan')) || 1;
+    if (colspan > 1) {
+      this.recordMergedCellInfo(mergedCellsInfo, colIndex, colspan, text);
+    }
+    
+    // 处理合并单元格
+    ExcelTableHelper.handleMergedCells(cell, worksheet, rowIndex, colIndex, skipCells);
   },
   
   /**
@@ -318,23 +374,77 @@ export default {
       return;
     }
     
-    // 遍历所有行
+    // 使用数据收集器先收集所有行的高度
+    const rowHeights = this.collectRowHeights(worksheet);
+    
+    // 然后应用高度
+    this.applyRowHeights(worksheet, rowHeights);
+  },
+  
+  /**
+   * 收集行高数据
+   * @param {Object} worksheet - 工作表对象
+   * @returns {Object} - 行高数据映射
+   */
+  collectRowHeights(worksheet) {
+    const rowHeights = {};
+    
     worksheet.eachRow({ includeEmpty: false }, function(row) {
-      let maxHeight = 20; // 默认行高
+      // 收集当前行的最大高度
+      const maxHeight = this.calculateRowMaxHeight(row);
+      rowHeights[row.number] = maxHeight;
+    }, this);
+    
+    return rowHeights;
+  },
+  
+  /**
+   * 计算行的最大高度
+   * @param {Object} row - 行对象
+   * @returns {Number} - 行高
+   */
+  calculateRowMaxHeight(row) {
+    let maxHeight = 20; // 默认行高
+    
+    row.eachCell({ includeEmpty: false }, function(cell) {
+      if (!cell || !cell.value) return;
       
-      // 检查内容高度
-      row.eachCell({ includeEmpty: false }, function(cell) {
-        if (!cell || !cell.value) return;
-        
-        // 如果内容包含换行符，增加行高
-        const value = cell.value.toString();
-        const lines = value.split('\n').length;
-        const cellHeight = Math.max(lines * 18, 20); // 每行至少18px，最少20px
-        
-        maxHeight = Math.max(maxHeight, cellHeight);
-      });
-      
-      row.height = maxHeight;
+      // 获取单元格的内容高度
+      const cellHeight = this.calculateCellHeight(cell);
+      maxHeight = Math.max(maxHeight, cellHeight);
+    }, this);
+    
+    return maxHeight;
+  },
+  
+  /**
+   * 计算单元格高度
+   * @param {Object} cell - 单元格对象
+   * @returns {Number} - 单元格高度
+   */
+  calculateCellHeight(cell) {
+    // 获取单元格内容
+    const value = cell.value ? cell.value.toString() : '';
+    
+    // 计算行数
+    const lines = value.split('\n').length;
+    
+    // 每行至少18px，最少20px
+    return Math.max(lines * 18, 20);
+  },
+  
+  /**
+   * 应用行高
+   * @param {Object} worksheet - 工作表对象
+   * @param {Object} rowHeights - 行高数据
+   */
+  applyRowHeights(worksheet, rowHeights) {
+    // 遍历所有行，应用高度
+    worksheet.eachRow({ includeEmpty: false }, function(row) {
+      const rowNumber = row.number;
+      if (rowHeights[rowNumber]) {
+        row.height = rowHeights[rowNumber];
+      }
     });
   }
 };
