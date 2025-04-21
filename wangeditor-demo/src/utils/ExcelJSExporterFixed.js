@@ -192,15 +192,26 @@ export default {
     const inlineStyle = htmlCell.style;
     const computedStyle = window.getComputedStyle(htmlCell);
     
+    // 处理字体家族
+    const fontFamily = inlineStyle.fontFamily || computedStyle.fontFamily;
+    if (fontFamily) {
+      // 将网页字体映射到Excel支持的字体
+      const mappedFont = this.mapWebFontToExcel(fontFamily);
+      excelCell.font.name = mappedFont;
+    }
+    
     // 检查是否有带样式的子元素
     let textColor = '';
     let backgroundColor = '';
+    let fontSize = '';
+    
     const styledElements = htmlCell.querySelectorAll('*[style]');
     Array.from(styledElements).forEach(elem => {
       const style = elem.style;
       // 收集颜色信息
       if (style.color) textColor = style.color;
       if (style.backgroundColor) backgroundColor = style.backgroundColor;
+      if (style.fontSize) fontSize = style.fontSize;
       
       // 检查文本装饰
       if (style.fontWeight === 'bold' || parseInt(style.fontWeight) >= 700) {
@@ -256,7 +267,9 @@ export default {
     }
     
     // 字体大小
-    if (inlineStyle.fontSize) {
+    if (fontSize) {
+      excelCell.font.size = Math.round(parseInt(fontSize) * 0.75);
+    } else if (inlineStyle.fontSize) {
       excelCell.font.size = Math.round(parseInt(inlineStyle.fontSize) * 0.75);
     } else if (computedStyle.fontSize) {
       excelCell.font.size = Math.round(parseInt(computedStyle.fontSize) * 0.75);
@@ -325,6 +338,50 @@ export default {
       bottom: { style: 'thin', color: { argb: 'FF000000' } },
       right: { style: 'thin', color: { argb: 'FF000000' } }
     };
+  },
+  
+  /**
+   * 映射网页字体到Excel支持的字体
+   * @param {String} webFont - 网页字体名称
+   * @returns {String} - Excel支持的字体名称
+   */
+  mapWebFontToExcel(webFont) {
+    const fontMap = {
+      // 中文字体
+      "宋体": "宋体",
+      "simsun": "宋体",
+      "黑体": "黑体",
+      "simhei": "黑体",
+      "微软雅黑": "微软雅黑",
+      "microsoft yahei": "微软雅黑",
+      "楷体": "楷体",
+      "simkai": "楷体",
+      "仿宋": "仿宋",
+      "fangsong": "仿宋",
+      
+      // 英文字体
+      "arial": "Arial",
+      "helvetica": "Arial",
+      "times new roman": "Times New Roman",
+      "calibri": "Calibri",
+      "verdana": "Verdana",
+      "tahoma": "Tahoma",
+      "courier new": "Courier New",
+      "georgia": "Georgia",
+      
+      // 通用字体
+      "sans-serif": "Arial",
+      "serif": "Times New Roman",
+      "monospace": "Courier New"
+    };
+    
+    // 将字体名称转为小写，去除引号和空格
+    const normalizedFont = webFont.toLowerCase()
+      .replace(/["']/g, '')
+      .trim();
+    
+    // 如果找到映射，返回对应的Excel字体
+    return fontMap[normalizedFont] || "宋体"; // 默认返回宋体
   },
   
   /**
@@ -401,7 +458,7 @@ export default {
     const columns = worksheet.columns;
     
     columns.forEach((column, index) => {
-      let maxLength = 10; // 最小列宽
+      let maxLength = 12; // 最小列宽
       
       // 遍历该列的所有单元格，找出最长的内容
       column.eachCell({ includeEmpty: true }, cell => {
@@ -412,7 +469,7 @@ export default {
           // 为中文字符增加额外宽度
           const chineseChars = cellValue.toString().match(/[\u4e00-\u9fa5]/g);
           if (chineseChars) {
-            length += chineseChars.length * 0.5;
+            length += chineseChars.length * 0.8;
           }
           
           if (length > maxLength) {
@@ -422,7 +479,7 @@ export default {
       });
       
       // 设置列宽，添加一些余量
-      column.width = Math.min(maxLength * 1.2, 50); // 最大宽度限制为50
+      column.width = Math.min(maxLength * 1.2, 60); // 最大宽度限制为60
     });
   },
   
@@ -433,15 +490,16 @@ export default {
   setRowHeights(worksheet) {
     // 遍历所有行
     worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
-      let maxHeight = 18; // 默认行高
+      let maxHeight = 20; // 默认行高
+      let pixelHeight = 0;
       
-      // 检查行中的内容
+      // 检查内容高度
       row.eachCell({ includeEmpty: false }, cell => {
         const cellValue = cell.value;
         if (cellValue) {
           // 如果内容包含换行符，增加行高
           const lines = cellValue.toString().split('\n').length;
-          const cellHeight = lines * 18;
+          const cellHeight = lines * 20;
           maxHeight = Math.max(maxHeight, cellHeight);
         }
       });

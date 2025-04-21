@@ -47,7 +47,10 @@ export default {
   },
   methods: {
     switchExample(exampleType) {
+      console.log('切换示例:', exampleType);
+      
       if (this.currentExample === exampleType) {
+        console.log('示例未变化，跳过设置');
         return; // 如果是同一个示例，不需要切换
       }
       
@@ -72,12 +75,16 @@ export default {
           break;
       }
       
+      console.log('有效内容长度:', content ? content.length : 0);
       this.currentExample = exampleType;
       
       // 确保编辑器已经初始化
       this.$nextTick(() => {
         if (this.$refs.editor) {
+          console.log('调用setContent');
           this.$refs.editor.setContent(content);
+        } else {
+          console.log('编辑器引用未找到');
         }
       });
     },

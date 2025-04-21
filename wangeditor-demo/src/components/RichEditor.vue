@@ -121,32 +121,61 @@ export default {
     },
     
     setContent(content) {
+      console.log('开始设置内容:', content ? '有内容' : '无内容');
+      
       // 设置编辑器内容
       if (!this.editor) {
+        console.log('编辑器未初始化，延迟执行');
         // 如果编辑器未初始化，延迟执行
         setTimeout(() => {
           this.setContent(content);
-        }, 100);
+        }, 200);
         return;
       }
 
       try {
-        // 清空编辑器
-        this.editor.clear();
+        // 确保编辑器获得焦点
+        this.editor.focus();
         
-        // 设置新内容
-        if (content) {
-          this.editor.setHtml(content);
-        } else {
-          // 如果内容为空，显示默认示例
-          this.editor.setHtml(getAdvancedNestedTableHTML());
-        }
+        // 先尝试禁用编辑
+        this.editor.disable();
         
-        // 更新状态
-        this.editorHtml = this.editor.getHtml();
-        this.$emit('input', this.editorHtml);
+        setTimeout(() => {
+          // 清空内容
+          this.editor.clear();
+          
+          // 重新启用编辑器
+          this.editor.enable();
+          
+          // 设置新内容
+          if (content) {
+            console.log('设置新内容');
+            this.editor.setHtml(content);
+            this.editorHtml = content;
+          } else {
+            // 如果内容为空，显示默认示例
+            console.log('设置默认内容');
+            const defaultContent = getAdvancedNestedTableHTML();
+            this.editor.setHtml(defaultContent);
+            this.editorHtml = defaultContent;
+          }
+          
+          // 更新状态
+          this.$emit('input', this.editorHtml);
+          console.log('内容设置完成', this.editor.getHtml().length);
+          
+          // 确保编辑器再次获得焦点
+          this.editor.focus();
+        }, 150);
+        
       } catch (error) {
         console.error('设置编辑器内容失败:', error);
+        // 尝试恢复编辑器状态
+        try {
+          this.editor.enable();
+        } catch (e) {
+          console.error('重新启用编辑器失败:', e);
+        }
       }
     }
   }
